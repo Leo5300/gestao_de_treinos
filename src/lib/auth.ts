@@ -7,6 +7,7 @@ import { env } from "./env.js";
 
 export const auth = betterAuth({
   baseURL: env.BETTER_AUTH_URL,
+
   trustedOrigins: [env.WEB_APP_BASE_URL],
 
   emailAndPassword: {
@@ -32,6 +33,16 @@ export const auth = betterAuth({
         attributes: {
           sameSite: "none",
           secure: true,
+          httpOnly: true,
+          path: "/",
+        },
+      },
+      state: {
+        attributes: {
+          sameSite: "none",
+          secure: true,
+          httpOnly: true,
+          path: "/",
         },
       },
     },
