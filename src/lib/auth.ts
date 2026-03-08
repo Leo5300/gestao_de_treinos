@@ -8,7 +8,10 @@ import { env } from "./env.js";
 export const auth = betterAuth({
   baseURL: env.BETTER_AUTH_URL,
 
-  trustedOrigins: [env.WEB_APP_BASE_URL],
+  // frontend autorizado a usar a auth API
+  trustedOrigins: [
+    env.WEB_APP_BASE_URL,
+  ],
 
   emailAndPassword: {
     enabled: true,
@@ -25,26 +28,33 @@ export const auth = betterAuth({
     provider: "postgresql",
   }),
 
-  plugins: [openAPI()],
+  plugins: [
+    openAPI(),
+  ],
 
   advanced: {
     cookies: {
+
+      // cookie de sessão do usuário
       sessionToken: {
         attributes: {
-          sameSite: "none",
-          secure: true,
           httpOnly: true,
+          secure: true,
+          sameSite: "none",
           path: "/",
         },
       },
+
+      // cookie usado no OAuth (state)
       state: {
         attributes: {
-          sameSite: "none",
-          secure: true,
           httpOnly: true,
+          secure: true,
+          sameSite: "none",
           path: "/",
         },
       },
+
     },
   },
 });
