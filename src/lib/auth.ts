@@ -25,4 +25,15 @@ export const auth = betterAuth({
   }),
 
   plugins: [openAPI()],
+
+  advanced: {
+    cookies: {
+      sessionToken: {
+        attributes: {
+          sameSite: "none",
+          secure: true,
+        },
+      },
+    },
+  },
 });
