@@ -32,11 +32,11 @@ const envToLogger = {
   },
   production: true,
   test: false,
-};
+} as const;
 
 const app = Fastify({
   logger: envToLogger[env.NODE_ENV],
-   trustProxy: true,
+  trustProxy: true,
 });
 
 app.setValidatorCompiler(validatorCompiler);
@@ -62,6 +62,7 @@ await app.register(fastifySwagger, {
 await app.register(fastifyCors, {
   origin: [env.WEB_APP_BASE_URL],
   credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 });
 
 await app.register(fastifyApiReference, {
@@ -119,10 +120,7 @@ app.withTypeProvider<ZodTypeProvider>().route({
   },
 });
 
-/*
-AUTH ROUTES
-Integra Fastify com Better Auth
-*/
+// Better Auth mount
 app.route({
   method: ["GET", "POST"],
   url: "/api/auth/*",
@@ -131,30 +129,40 @@ app.route({
       const url = new URL(request.url, env.BETTER_AUTH_URL);
 
       const headers = new Headers();
-      for (const [key, value] of Object.entries(request.headers)) {
-        if (value) headers.append(key, value.toString());
-      }
+      Object.entries(request.headers).forEach(([key, value]) => {
+        if (!value) return;
+
+        if (Array.isArray(value)) {
+          value.forEach((v) => headers.append(key, v));
+        } else {
+          headers.append(key, String(value));
+        }
+      });
 
       const req = new Request(url.toString(), {
         method: request.method,
         headers,
-        credentials: "include",
-        ...(request.body ? { body: JSON.stringify(request.body) } : {}),
+        ...(request.body
+          ? {
+              body:
+                typeof request.body === "string"
+                  ? request.body
+                  : JSON.stringify(request.body),
+            }
+          : {}),
       });
 
       const response = await auth.handler(req);
 
       reply.status(response.status);
-
       response.headers.forEach((value, key) => {
         reply.header(key, value);
       });
 
-      const body = await response.text();
-      reply.send(body);
+      const text = await response.text();
+      reply.send(text || null);
     } catch (error) {
       app.log.error(error);
-
       reply.status(500).send({
         error: "Internal authentication error",
         code: "AUTH_FAILURE",
@@ -168,6 +176,8 @@ try {
     host: "0.0.0.0",
     port: env.PORT,
   });
+
+  console.log("🚀 Server running");
 } catch (err) {
   app.log.error(err);
   process.exit(1);
