@@ -27,9 +27,14 @@ export const meRoutes = async (app: FastifyInstance) => {
     },
     handler: async (request, reply) => {
       try {
+        /**
+         * 🔐 CORREÇÃO
+         * usar request.raw.headers
+         */
         const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.headers),
+          headers: fromNodeHeaders(request.raw.headers),
         });
+
         if (!session) {
           return reply.status(401).send({
             error: "Unauthorized",
@@ -38,6 +43,7 @@ export const meRoutes = async (app: FastifyInstance) => {
         }
 
         const getUserTrainData = new GetUserTrainData();
+
         const result = await getUserTrainData.execute({
           userId: session.user.id,
         });
@@ -45,6 +51,7 @@ export const meRoutes = async (app: FastifyInstance) => {
         return reply.status(200).send(result);
       } catch (error) {
         app.log.error(error);
+
         return reply.status(500).send({
           error: "Internal server error",
           code: "INTERNAL_SERVER_ERROR",
@@ -68,9 +75,14 @@ export const meRoutes = async (app: FastifyInstance) => {
     },
     handler: async (request, reply) => {
       try {
+        /**
+         * 🔐 CORREÇÃO
+         * usar request.raw.headers
+         */
         const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.headers),
+          headers: fromNodeHeaders(request.raw.headers),
         });
+
         if (!session) {
           return reply.status(401).send({
             error: "Unauthorized",
@@ -79,6 +91,7 @@ export const meRoutes = async (app: FastifyInstance) => {
         }
 
         const upsertUserTrainData = new UpsertUserTrainData();
+
         const result = await upsertUserTrainData.execute({
           userId: session.user.id,
           weightInGrams: request.body.weightInGrams,
@@ -90,6 +103,7 @@ export const meRoutes = async (app: FastifyInstance) => {
         return reply.status(200).send(result);
       } catch (error) {
         app.log.error(error);
+
         return reply.status(500).send({
           error: "Internal server error",
           code: "INTERNAL_SERVER_ERROR",
