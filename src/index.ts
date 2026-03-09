@@ -83,12 +83,19 @@ await app.register(fastifyApiReference, {
   },
 });
 
-// REST routes
+// ----------------------------
+// REST ROUTES
+// ----------------------------
+
 await app.register(homeRoutes, { prefix: "/home" });
 await app.register(meRoutes, { prefix: "/me" });
 await app.register(statsRoutes, { prefix: "/stats" });
 await app.register(workoutPlanRoutes, { prefix: "/workout-plans" });
 await app.register(aiRoutes, { prefix: "/ai" });
+
+// ----------------------------
+// SWAGGER JSON
+// ----------------------------
 
 app.withTypeProvider<ZodTypeProvider>().route({
   method: "GET",
@@ -100,6 +107,10 @@ app.withTypeProvider<ZodTypeProvider>().route({
     return app.swagger();
   },
 });
+
+// ----------------------------
+// HEALTH CHECK
+// ----------------------------
 
 app.withTypeProvider<ZodTypeProvider>().route({
   method: "GET",
@@ -120,15 +131,20 @@ app.withTypeProvider<ZodTypeProvider>().route({
   },
 });
 
-// Better Auth mount
+// ----------------------------
+// BETTER AUTH PROXY
+// ----------------------------
+
 app.route({
-  method: ["GET", "POST"],
+  method: ["GET", "POST", "OPTIONS"],
   url: "/api/auth/*",
   async handler(request, reply) {
     try {
       const url = new URL(request.url, env.BETTER_AUTH_URL);
 
       const headers = new Headers();
+
+      // copia todos os headers da requisição original
       Object.entries(request.headers).forEach(([key, value]) => {
         if (!value) return;
 
@@ -138,6 +154,11 @@ app.route({
           headers.append(key, String(value));
         }
       });
+
+      // garante que cookie seja encaminhado
+      if (request.headers.cookie) {
+        headers.set("cookie", request.headers.cookie);
+      }
 
       const req = new Request(url.toString(), {
         method: request.method,
@@ -155,21 +176,29 @@ app.route({
       const response = await auth.handler(req);
 
       reply.status(response.status);
+
+      // copia todos os headers da resposta
       response.headers.forEach((value, key) => {
         reply.header(key, value);
       });
 
       const text = await response.text();
-      reply.send(text || null);
+
+      return reply.send(text || null);
     } catch (error) {
       app.log.error(error);
-      reply.status(500).send({
+
+      return reply.status(500).send({
         error: "Internal authentication error",
         code: "AUTH_FAILURE",
       });
     }
   },
 });
+
+// ----------------------------
+// SERVER START
+// ----------------------------
 
 try {
   await app.listen({
