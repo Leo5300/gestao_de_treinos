@@ -5,7 +5,7 @@ interface InputDto {
   weightInGrams: number;
   heightInCentimeters: number;
   age: number;
-  bodyFatPercentage: number;
+  bodyFatPercentage?: number | null;
 }
 
 interface OutputDto {
@@ -18,13 +18,21 @@ interface OutputDto {
 
 export class UpsertUserTrainData {
   async execute(dto: InputDto): Promise<OutputDto> {
+    const currentUser = await prisma.user.findUnique({
+      where: { id: dto.userId },
+      select: { bodyFatPercentage: true },
+    });
+
+    const bodyFatPercentage =
+      dto.bodyFatPercentage ?? currentUser?.bodyFatPercentage ?? 18;
+
     const user = await prisma.user.update({
       where: { id: dto.userId },
       data: {
         weightInGrams: dto.weightInGrams,
         heightInCentimeters: dto.heightInCentimeters,
         age: dto.age,
-        bodyFatPercentage: dto.bodyFatPercentage,
+        bodyFatPercentage,
       },
     });
 

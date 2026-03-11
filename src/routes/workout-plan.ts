@@ -44,7 +44,7 @@ export const workoutPlanRoutes = async (app: FastifyInstance) => {
     handler: async (request, reply) => {
       try {
         const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.headers),
+          headers: fromNodeHeaders(request.raw.headers),
         });
         if (!session) {
           return reply.status(401).send({
@@ -89,7 +89,7 @@ export const workoutPlanRoutes = async (app: FastifyInstance) => {
     handler: async (request, reply) => {
       try {
         const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.headers),
+          headers: fromNodeHeaders(request.raw.headers),
         });
         if (!session) {
           return reply.status(401).send({
@@ -139,7 +139,7 @@ export const workoutPlanRoutes = async (app: FastifyInstance) => {
     handler: async (request, reply) => {
       try {
         const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.headers),
+          headers: fromNodeHeaders(request.raw.headers),
         });
         if (!session) {
           return reply.status(401).send({
@@ -193,7 +193,7 @@ export const workoutPlanRoutes = async (app: FastifyInstance) => {
     handler: async (request, reply) => {
       try {
         const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.headers),
+          headers: fromNodeHeaders(request.raw.headers),
         });
         if (!session) {
           return reply.status(401).send({
@@ -250,7 +250,7 @@ export const workoutPlanRoutes = async (app: FastifyInstance) => {
     handler: async (request, reply) => {
       try {
         const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.headers),
+          headers: fromNodeHeaders(request.raw.headers),
         });
         if (!session) {
           return reply.status(401).send({
@@ -321,7 +321,7 @@ export const workoutPlanRoutes = async (app: FastifyInstance) => {
     handler: async (request, reply) => {
       try {
         const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.headers),
+          headers: fromNodeHeaders(request.raw.headers),
         });
         if (!session) {
           return reply.status(401).send({
