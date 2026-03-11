@@ -10,10 +10,13 @@ const isProduction =
   env.BETTER_AUTH_URL.startsWith("https://");
 
 const appOrigin = env.WEB_APP_BASE_URL.replace(/\/$/, "");
+
 const wwwOrigin = appOrigin.startsWith("https://www.")
   ? appOrigin
   : appOrigin.replace("https://", "https://www.");
+
 const appHostname = new URL(appOrigin).hostname.replace(/^www\./, "");
+
 const cookieDomain =
   appHostname === "localhost" || appHostname.includes(":")
     ? undefined
@@ -42,6 +45,14 @@ export const auth = betterAuth({
   plugins: [openAPI()],
 
   advanced: {
+    defaultCookieAttributes: {
+      domain: cookieDomain,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      httpOnly: true,
+      path: "/",
+    },
+
     cookies: {
       sessionToken: {
         attributes: {
@@ -49,7 +60,7 @@ export const auth = betterAuth({
           secure: isProduction,
           sameSite: isProduction ? "none" : "lax",
           path: "/",
-          ...(cookieDomain ? { domain: cookieDomain } : {}),
+          domain: cookieDomain,
         },
       },
 
@@ -59,7 +70,7 @@ export const auth = betterAuth({
           secure: isProduction,
           sameSite: isProduction ? "none" : "lax",
           path: "/",
-          ...(cookieDomain ? { domain: cookieDomain } : {}),
+          domain: cookieDomain,
         },
       },
     },
