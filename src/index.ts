@@ -92,10 +92,14 @@ function copyResponseHeadersToReply(response: Response, reply: FastifyReply) {
   const headersWithOptionalGetSetCookie = response.headers as Headers & {
     getSetCookie?: () => string[];
   };
+  const setCookies =
+    headersWithOptionalGetSetCookie.getSetCookie?.() ??
+    (() => {
+      const setCookieHeader = response.headers.get("set-cookie");
+      return setCookieHeader ? [setCookieHeader] : [];
+    })();
 
-  const setCookies = headersWithOptionalGetSetCookie.getSetCookie?.();
-
-  if (setCookies && setCookies.length > 0) {
+  if (setCookies.length > 0) {
     reply.header("set-cookie", setCookies);
   }
 
