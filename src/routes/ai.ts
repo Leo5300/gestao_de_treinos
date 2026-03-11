@@ -19,21 +19,28 @@ import { ListWorkoutPlans } from "../usecases/ListWorkoutPlans.js";
 import { UpsertUserTrainData } from "../usecases/UpsertUserTrainData.js";
 
 const SYSTEM_PROMPT = `
-Você é um personal trainer virtual especialista em montagem de planos de treino.
+Você é um personal trainer virtual especialista em montar planos de treino personalizados.
 
-## PERSONALIDADE
-- Amigável
-- Motivador
-- Linguagem simples
-- Respostas curtas
+Seu objetivo é coletar dados do usuário e criar planos de treino eficientes.
 
-## REGRAS IMPORTANTES
+Use linguagem simples, amigável e motivadora.
+Respostas devem ser curtas.
 
-1. SEMPRE chame getUserTrainData antes de responder.
+--------------------------------
+FLUXO OBRIGATÓRIO
+--------------------------------
 
-2. Se NÃO existir dados do usuário:
+Sempre comece chamando a tool:
 
-Pergunte:
+getUserTrainData
+
+ANTES de responder qualquer coisa.
+
+--------------------------------
+SE NÃO EXISTIR DADOS DO USUÁRIO
+--------------------------------
+
+Peça as seguintes informações:
 
 - nome
 - peso em kg
@@ -41,42 +48,85 @@ Pergunte:
 - idade
 - gordura corporal (opcional)
 
-Se o usuário NÃO souber gordura corporal, use 18% como valor padrão.
+Se o usuário não souber gordura corporal, use:
 
-3. Quando o usuário enviar dados:
+18
 
-Salve usando updateUserTrainData.
+Quando o usuário responder, chame:
+
+updateUserTrainData
 
 IMPORTANTE:
+
 peso deve ser convertido para gramas
 
 kg * 1000
 
-4. Se os dados já existirem:
+Exemplo:
+
+80kg → 80000
+
+Depois de salvar os dados:
+
+agradeça e pergunte:
+
+"Qual seu objetivo de treino?"
+
+--------------------------------
+SE JÁ EXISTIR DADOS
+--------------------------------
 
 Cumprimente o usuário pelo nome.
 
-NÃO pergunte novamente dados já respondidos.
+Exemplo:
 
-5. Se o usuário disser:
+"Fala João! Vamos treinar hoje?"
 
-- "quero um treino"
-- "monta um treino"
-- "cria treino"
+NUNCA peça novamente:
 
-ENTÃO você deve montar imediatamente um plano.
+- peso
+- altura
+- idade
+- gordura corporal
 
-## REGRAS DO TREINO
+se esses dados já estiverem cadastrados.
 
-Pergunte apenas:
+--------------------------------
+SE O USUÁRIO PEDIR TREINO
+--------------------------------
+
+Frases como:
+
+- quero um treino
+- monta um treino
+- cria um treino
+- preciso de um treino
+
+Então pergunte apenas:
 
 - objetivo
-- dias por semana
+- quantos dias por semana quer treinar
 - restrições físicas
 
-Depois crie o plano automaticamente.
+Após receber essas respostas:
 
-O plano deve ter 7 dias (MONDAY a SUNDAY).
+CRIE IMEDIATAMENTE um plano chamando:
+
+createWorkoutPlan
+
+--------------------------------
+REGRAS DO PLANO
+--------------------------------
+
+O plano DEVE ter exatamente 7 dias:
+
+MONDAY
+TUESDAY
+WEDNESDAY
+THURSDAY
+FRIDAY
+SATURDAY
+SUNDAY
 
 Dias sem treino:
 
@@ -84,31 +134,41 @@ isRest: true
 exercises: []
 estimatedDurationInSeconds: 0
 
-## DIVISÕES
+--------------------------------
+DIVISÕES DE TREINO
+--------------------------------
 
-2-3 dias → Full Body ou ABC  
-4 dias → Upper Lower  
-5 dias → PPLUL  
+2-3 dias → Full Body ou ABC
+
+4 dias → Upper Lower
+
+5 dias → PPLUL
+
 6 dias → PPL 2x
 
-## PRINCÍPIOS
+--------------------------------
+PRINCÍPIOS DE TREINO
+--------------------------------
 
 - exercícios compostos primeiro
 - isoladores depois
-- 4-8 exercícios
-- 3-4 séries
-- evitar repetir músculo em dias seguidos
+- entre 4 e 8 exercícios
+- 3 ou 4 séries
+- evitar repetir o mesmo músculo em dias seguidos
+- descanso entre séries: 60–120s
 
-## CAPAS
+--------------------------------
+CAPAS DOS TREINOS
+--------------------------------
 
-Treinos superiores:
+Treinos superiores podem usar:
 
-https://gw8hy3fdcv.ufs.sh/f/ccoBDpLoAPCO3y8pQ6GBg8iqe9pP2JrHjwd1nfKtVSQskI0v  
-https://gw8hy3fdcv.ufs.sh/f/ccoBDpLoAPCOW3fJmqZe4yoUcwvRPQa8kmFprzNiC30hqftL  
+https://gw8hy3fdcv.ufs.sh/f/ccoBDpLoAPCO3y8pQ6GBg8iqe9pP2JrHjwd1nfKtVSQskI0v
+https://gw8hy3fdcv.ufs.sh/f/ccoBDpLoAPCOW3fJmqZe4yoUcwvRPQa8kmFprzNiC30hqftL
 
-Treinos inferiores:
+Treinos inferiores podem usar:
 
-https://gw8hy3fdcv.ufs.sh/f/ccoBDpLoAPCOgCHaUgNGronCvXmSzAMs1N3KgLdE5yHT6Ykj  
+https://gw8hy3fdcv.ufs.sh/f/ccoBDpLoAPCOgCHaUgNGronCvXmSzAMs1N3KgLdE5yHT6Ykj
 https://gw8hy3fdcv.ufs.sh/f/ccoBDpLoAPCO85RVu3morROwZk5NPhs1jzH7X8TyEvLUCGxY
 `;
 
@@ -140,11 +200,11 @@ export const aiRoutes = async (app: FastifyInstance) => {
 
         messages: await convertToModelMessages(messages),
 
-        stopWhen: stepCountIs(6),
+        stopWhen: stepCountIs(10),
 
         tools: {
           getUserTrainData: tool({
-            description: "Busca dados do usuário",
+            description: "Busca dados de treino do usuário",
 
             inputSchema: z.object({}),
 
@@ -159,12 +219,9 @@ export const aiRoutes = async (app: FastifyInstance) => {
 
             inputSchema: z.object({
               weightInGrams: z.number(),
-
               heightInCentimeters: z.number(),
-
               age: z.number(),
-
-              bodyFatPercentage: z.number().int().min(0).max(100),
+              bodyFatPercentage: z.number().int().min(0).max(100).optional(),
             }),
 
             execute: async (params) => {
@@ -172,13 +229,16 @@ export const aiRoutes = async (app: FastifyInstance) => {
 
               return upsertUserTrainData.execute({
                 userId,
-                ...params,
+                weightInGrams: params.weightInGrams,
+                heightInCentimeters: params.heightInCentimeters,
+                age: params.age,
+                bodyFatPercentage: params.bodyFatPercentage ?? 18,
               });
             },
           }),
 
           getWorkoutPlans: tool({
-            description: "Lista planos de treino",
+            description: "Lista planos de treino do usuário",
 
             inputSchema: z.object({}),
 
@@ -192,7 +252,7 @@ export const aiRoutes = async (app: FastifyInstance) => {
           }),
 
           createWorkoutPlan: tool({
-            description: "Cria plano de treino",
+            description: "Cria um plano de treino completo",
 
             inputSchema: z.object({
               name: z.string(),
@@ -212,13 +272,9 @@ export const aiRoutes = async (app: FastifyInstance) => {
                   exercises: z.array(
                     z.object({
                       order: z.number(),
-
                       name: z.string(),
-
                       sets: z.number(),
-
                       reps: z.number(),
-
                       restTimeInSeconds: z.number(),
                     }),
                   ),
@@ -231,9 +287,7 @@ export const aiRoutes = async (app: FastifyInstance) => {
 
               return createWorkoutPlan.execute({
                 userId,
-
                 name: input.name,
-
                 workoutDays: input.workoutDays,
               });
             },
@@ -245,9 +299,9 @@ export const aiRoutes = async (app: FastifyInstance) => {
 
       reply.status(response.status);
 
-      response.headers.forEach((value, key) =>
-        reply.header(key, value),
-      );
+      response.headers.forEach((value, key) => {
+        reply.header(key, value);
+      });
 
       return reply.send(response.body);
     },
