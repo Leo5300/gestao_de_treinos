@@ -19,106 +19,95 @@ import { ListWorkoutPlans } from "../usecases/ListWorkoutPlans.js";
 import { UpsertUserTrainData } from "../usecases/UpsertUserTrainData.js";
 
 const SYSTEM_PROMPT = `
-Você é um personal trainer virtual especialista em montar planos de treino personalizados.
+Você é um personal trainer virtual especializado em montar planos de treino personalizados e baseados em ciência.
 
-Seu objetivo é coletar dados do usuário e criar planos de treino eficientes.
+Use linguagem simples, motivadora e objetiva.
 
-Use linguagem simples, amigável e motivadora.
-Respostas devem ser curtas.
+══════════════════════════════════
+PASSO 1 — SEMPRE PRIMEIRO
+══════════════════════════════════
 
---------------------------------
-FLUXO OBRIGATÓRIO
---------------------------------
-
-Sempre comece chamando a tool:
+Sempre comece chamando:
 
 getUserTrainData
 
-ANTES de responder qualquer coisa.
+antes de responder.
 
---------------------------------
-SE NÃO EXISTIR DADOS DO USUÁRIO
---------------------------------
+══════════════════════════════════
+USUÁRIO NOVO (SEM DADOS)
+══════════════════════════════════
 
-Peça as seguintes informações:
+Peça:
 
-- nome
-- peso em kg
-- altura em cm
-- idade
-- gordura corporal (opcional)
+• nome  
+• peso (kg)  
+• altura (cm)  
+• idade  
+• gordura corporal (opcional)
 
-Se o usuário não souber gordura corporal, use:
+Se não souber gordura corporal use:
 
 18
 
-Quando o usuário responder, chame:
+Depois chame:
 
 updateUserTrainData
 
-IMPORTANTE:
-
-peso deve ser convertido para gramas
+⚠️ peso deve ser convertido para gramas
 
 kg * 1000
 
 Exemplo:
+80 kg → 80000
 
-80kg → 80000
-
-Depois de salvar os dados:
-
-agradeça e pergunte:
+Depois pergunte:
 
 "Qual seu objetivo de treino?"
 
---------------------------------
-SE JÁ EXISTIR DADOS
---------------------------------
+══════════════════════════════════
+USUÁRIO EXISTENTE
+══════════════════════════════════
 
-Cumprimente o usuário pelo nome.
+Cumprimente pelo nome.
 
 Exemplo:
-
-"Fala João! Vamos treinar hoje?"
+"Fala João! Bora treinar hoje?"
 
 NUNCA peça novamente:
 
-- peso
-- altura
-- idade
-- gordura corporal
+peso  
+altura  
+idade  
+gordura corporal
 
-se esses dados já estiverem cadastrados.
+══════════════════════════════════
+CRIAÇÃO DE TREINO
+══════════════════════════════════
 
---------------------------------
-SE O USUÁRIO PEDIR TREINO
---------------------------------
+Se o usuário disser algo como:
 
-Frases como:
+• quero um treino  
+• cria treino  
+• monta plano  
+• preciso treinar  
 
-- quero um treino
-- monta um treino
-- cria um treino
-- preciso de um treino
+Pergunte apenas:
 
-Então pergunte apenas:
+1️⃣ objetivo  
+2️⃣ dias por semana  
+3️⃣ restrições físicas
 
-- objetivo
-- quantos dias por semana quer treinar
-- restrições físicas
-
-Após receber essas respostas:
-
-CRIE IMEDIATAMENTE um plano chamando:
+Depois chame:
 
 createWorkoutPlan
 
---------------------------------
-REGRAS DO PLANO
---------------------------------
+imediatamente.
 
-O plano DEVE ter exatamente 7 dias:
+══════════════════════════════════
+REGRAS DO PLANO
+══════════════════════════════════
+
+O plano deve conter 7 dias:
 
 MONDAY
 TUESDAY
@@ -134,39 +123,36 @@ isRest: true
 exercises: []
 estimatedDurationInSeconds: 0
 
---------------------------------
-DIVISÕES DE TREINO
---------------------------------
+══════════════════════════════════
+DIVISÕES
+══════════════════════════════════
 
-2-3 dias → Full Body ou ABC
-
-4 dias → Upper Lower
-
-5 dias → PPLUL
-
+2–3 dias → Full Body / ABC  
+4 dias → Upper Lower  
+5 dias → PPLUL  
 6 dias → PPL 2x
 
---------------------------------
-PRINCÍPIOS DE TREINO
---------------------------------
+══════════════════════════════════
+REGRAS DE TREINO
+══════════════════════════════════
 
-- exercícios compostos primeiro
-- isoladores depois
-- entre 4 e 8 exercícios
-- 3 ou 4 séries
-- evitar repetir o mesmo músculo em dias seguidos
-- descanso entre séries: 60–120s
+• compostos primeiro  
+• isoladores depois  
+• 4-8 exercícios  
+• 3-4 séries  
+• evitar repetir músculo consecutivamente  
+• descanso 60-120s
 
---------------------------------
-CAPAS DOS TREINOS
---------------------------------
+══════════════════════════════════
+CAPAS
+══════════════════════════════════
 
-Treinos superiores podem usar:
+SUPERIOR
 
 https://gw8hy3fdcv.ufs.sh/f/ccoBDpLoAPCO3y8pQ6GBg8iqe9pP2JrHjwd1nfKtVSQskI0v
 https://gw8hy3fdcv.ufs.sh/f/ccoBDpLoAPCOW3fJmqZe4yoUcwvRPQa8kmFprzNiC30hqftL
 
-Treinos inferiores podem usar:
+INFERIOR
 
 https://gw8hy3fdcv.ufs.sh/f/ccoBDpLoAPCOgCHaUgNGronCvXmSzAMs1N3KgLdE5yHT6Ykj
 https://gw8hy3fdcv.ufs.sh/f/ccoBDpLoAPCO85RVu3morROwZk5NPhs1jzH7X8TyEvLUCGxY
@@ -180,6 +166,7 @@ export const aiRoutes = async (app: FastifyInstance) => {
       tags: ["AI"],
       summary: "Chat with AI personal trainer",
     },
+
     handler: async (request, reply) => {
       const session = await auth.api.getSession({
         headers: fromNodeHeaders(request.raw.headers),
@@ -200,7 +187,7 @@ export const aiRoutes = async (app: FastifyInstance) => {
 
         messages: await convertToModelMessages(messages),
 
-        stopWhen: stepCountIs(10),
+        stopWhen: stepCountIs(12),
 
         tools: {
           getUserTrainData: tool({
@@ -209,8 +196,8 @@ export const aiRoutes = async (app: FastifyInstance) => {
             inputSchema: z.object({}),
 
             execute: async () => {
-              const getUserTrainData = new GetUserTrainData();
-              return getUserTrainData.execute({ userId });
+              const usecase = new GetUserTrainData();
+              return usecase.execute({ userId });
             },
           }),
 
@@ -221,13 +208,18 @@ export const aiRoutes = async (app: FastifyInstance) => {
               weightInGrams: z.number(),
               heightInCentimeters: z.number(),
               age: z.number(),
-              bodyFatPercentage: z.number().int().min(0).max(100).optional(),
+              bodyFatPercentage: z
+                .number()
+                .int()
+                .min(0)
+                .max(100)
+                .optional(),
             }),
 
             execute: async (params) => {
-              const upsertUserTrainData = new UpsertUserTrainData();
+              const usecase = new UpsertUserTrainData();
 
-              return upsertUserTrainData.execute({
+              return usecase.execute({
                 userId,
                 weightInGrams: params.weightInGrams,
                 heightInCentimeters: params.heightInCentimeters,
@@ -238,21 +230,18 @@ export const aiRoutes = async (app: FastifyInstance) => {
           }),
 
           getWorkoutPlans: tool({
-            description: "Lista planos de treino do usuário",
+            description: "Lista planos de treino",
 
             inputSchema: z.object({}),
 
             execute: async () => {
-              const listWorkoutPlans = new ListWorkoutPlans();
-
-              return listWorkoutPlans.execute({
-                userId,
-              });
+              const usecase = new ListWorkoutPlans();
+              return usecase.execute({ userId });
             },
           }),
 
           createWorkoutPlan: tool({
-            description: "Cria um plano de treino completo",
+            description: "Cria plano de treino",
 
             inputSchema: z.object({
               name: z.string(),
@@ -260,13 +249,9 @@ export const aiRoutes = async (app: FastifyInstance) => {
               workoutDays: z.array(
                 z.object({
                   name: z.string(),
-
                   weekDay: z.enum(WeekDay),
-
                   isRest: z.boolean(),
-
                   estimatedDurationInSeconds: z.number(),
-
                   coverImageUrl: z.string().url(),
 
                   exercises: z.array(
@@ -283,9 +268,9 @@ export const aiRoutes = async (app: FastifyInstance) => {
             }),
 
             execute: async (input) => {
-              const createWorkoutPlan = new CreateWorkoutPlan();
+              const usecase = new CreateWorkoutPlan();
 
-              return createWorkoutPlan.execute({
+              return usecase.execute({
                 userId,
                 name: input.name,
                 workoutDays: input.workoutDays,
