@@ -3,7 +3,7 @@ import "dotenv/config";
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import fastifyApiReference from "@scalar/fastify-api-reference";
-import Fastify from "fastify";
+import Fastify, { FastifyReply } from "fastify";
 import {
   jsonSchemaTransform,
   serializerCompiler,
@@ -42,6 +42,11 @@ const app = Fastify({
 app.setValidatorCompiler(validatorCompiler);
 app.setSerializerCompiler(serializerCompiler);
 
+const rootOrigin = env.WEB_APP_BASE_URL.replace(/\/$/, "");
+const wwwOrigin = rootOrigin.startsWith("https://www.")
+  ? rootOrigin
+  : rootOrigin.replace("https://", "https://www.");
+
 await app.register(fastifySwagger, {
   openapi: {
     info: {
@@ -60,7 +65,7 @@ await app.register(fastifySwagger, {
 });
 
 await app.register(fastifyCors, {
-  origin: [env.WEB_APP_BASE_URL],
+  origin: [rootOrigin, wwwOrigin],
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 });
@@ -83,19 +88,86 @@ await app.register(fastifyApiReference, {
   },
 });
 
-// ----------------------------
-// REST ROUTES
-// ----------------------------
+function copyResponseHeadersToReply(response: Response, reply: FastifyReply) {
+  const headersWithOptionalGetSetCookie = response.headers as Headers & {
+    getSetCookie?: () => string[];
+  };
+
+  const setCookies = headersWithOptionalGetSetCookie.getSetCookie?.();
+
+  if (setCookies && setCookies.length > 0) {
+    reply.header("set-cookie", setCookies);
+  }
+
+  response.headers.forEach((value, key) => {
+    const lowerKey = key.toLowerCase();
+
+    if (lowerKey === "set-cookie") return;
+    if (lowerKey === "content-length") return;
+
+    reply.header(key, value);
+  });
+}
+
+app.route({
+  method: ["GET", "POST", "OPTIONS"],
+  url: "/api/auth/*",
+  async handler(request, reply) {
+    try {
+      const url = new URL(request.url, env.BETTER_AUTH_URL);
+
+      const headers = new Headers();
+
+      Object.entries(request.raw.headers).forEach(([key, value]) => {
+        if (!value) return;
+
+        if (Array.isArray(value)) {
+          value.forEach((v) => headers.append(key, v));
+        } else {
+          headers.append(key, String(value));
+        }
+      });
+
+      if (request.raw.headers.cookie) {
+        headers.set("cookie", request.raw.headers.cookie);
+      }
+
+      const req = new Request(url.toString(), {
+        method: request.method,
+        headers,
+        ...(request.body
+          ? {
+              body:
+                typeof request.body === "string"
+                  ? request.body
+                  : JSON.stringify(request.body),
+            }
+          : {}),
+      });
+
+      const response = await auth.handler(req);
+
+      reply.status(response.status);
+      copyResponseHeadersToReply(response, reply);
+
+      const text = await response.text();
+      return reply.send(text || null);
+    } catch (error) {
+      app.log.error(error);
+
+      return reply.status(500).send({
+        error: "Internal authentication error",
+        code: "AUTH_FAILURE",
+      });
+    }
+  },
+});
 
 await app.register(homeRoutes, { prefix: "/home" });
 await app.register(meRoutes, { prefix: "/me" });
 await app.register(statsRoutes, { prefix: "/stats" });
 await app.register(workoutPlanRoutes, { prefix: "/workout-plans" });
 await app.register(aiRoutes, { prefix: "/ai" });
-
-// ----------------------------
-// SWAGGER JSON
-// ----------------------------
 
 app.withTypeProvider<ZodTypeProvider>().route({
   method: "GET",
@@ -107,10 +179,6 @@ app.withTypeProvider<ZodTypeProvider>().route({
     return app.swagger();
   },
 });
-
-// ----------------------------
-// HEALTH CHECK
-// ----------------------------
 
 app.withTypeProvider<ZodTypeProvider>().route({
   method: "GET",
@@ -130,75 +198,6 @@ app.withTypeProvider<ZodTypeProvider>().route({
     };
   },
 });
-
-// ----------------------------
-// BETTER AUTH PROXY
-// ----------------------------
-
-app.route({
-  method: ["GET", "POST", "OPTIONS"],
-  url: "/api/auth/*",
-  async handler(request, reply) {
-    try {
-      const url = new URL(request.url, env.BETTER_AUTH_URL);
-
-      const headers = new Headers();
-
-      // copia todos os headers da requisição original
-      Object.entries(request.headers).forEach(([key, value]) => {
-        if (!value) return;
-
-        if (Array.isArray(value)) {
-          value.forEach((v) => headers.append(key, v));
-        } else {
-          headers.append(key, String(value));
-        }
-      });
-
-      // garante que cookie seja encaminhado
-      if (request.headers.cookie) {
-        headers.set("cookie", request.headers.cookie);
-      }
-
-      const req = new Request(url.toString(), {
-        method: request.method,
-        headers,
-        ...(request.body
-          ? {
-              body:
-                typeof request.body === "string"
-                  ? request.body
-                  : JSON.stringify(request.body),
-            }
-          : {}),
-      });
-
-      const response = await auth.handler(req);
-
-      reply.status(response.status);
-
-      // copia todos os headers da resposta
-      response.headers.forEach((value, key) => {
-        reply.header(key, value);
-      });
-
-      const text = await response.text();
-
-      return reply.send(text || null);
-    } catch (error) {
-      app.log.error(error);
-
-      return reply.status(500).send({
-        error: "Internal authentication error",
-        code: "AUTH_FAILURE",
-      });
-    }
-  },
-});
-
-// ----------------------------
-// SERVER START
-// ----------------------------
 
 try {
   await app.listen({

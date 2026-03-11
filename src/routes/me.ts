@@ -27,10 +27,6 @@ export const meRoutes = async (app: FastifyInstance) => {
     },
     handler: async (request, reply) => {
       try {
-        /**
-         * 🔐 CORREÇÃO
-         * usar request.raw.headers
-         */
         const session = await auth.api.getSession({
           headers: fromNodeHeaders(request.raw.headers),
         });
@@ -43,7 +39,6 @@ export const meRoutes = async (app: FastifyInstance) => {
         }
 
         const getUserTrainData = new GetUserTrainData();
-
         const result = await getUserTrainData.execute({
           userId: session.user.id,
         });
@@ -75,10 +70,6 @@ export const meRoutes = async (app: FastifyInstance) => {
     },
     handler: async (request, reply) => {
       try {
-        /**
-         * 🔐 CORREÇÃO
-         * usar request.raw.headers
-         */
         const session = await auth.api.getSession({
           headers: fromNodeHeaders(request.raw.headers),
         });
@@ -91,7 +82,6 @@ export const meRoutes = async (app: FastifyInstance) => {
         }
 
         const upsertUserTrainData = new UpsertUserTrainData();
-
         const result = await upsertUserTrainData.execute({
           userId: session.user.id,
           weightInGrams: request.body.weightInGrams,

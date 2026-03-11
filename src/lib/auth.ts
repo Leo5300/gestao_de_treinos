@@ -5,13 +5,17 @@ import { openAPI } from "better-auth/plugins";
 import { prisma } from "./db.js";
 import { env } from "./env.js";
 
+const isProduction = env.NODE_ENV === "production";
+
+const appOrigin = env.WEB_APP_BASE_URL.replace(/\/$/, "");
+const wwwOrigin = appOrigin.startsWith("https://www.")
+  ? appOrigin
+  : appOrigin.replace("https://", "https://www.");
+
 export const auth = betterAuth({
   baseURL: env.BETTER_AUTH_URL,
 
-  // frontend autorizado a usar a auth API
-  trustedOrigins: [
-    env.WEB_APP_BASE_URL,
-  ],
+  trustedOrigins: [appOrigin, wwwOrigin],
 
   emailAndPassword: {
     enabled: true,
@@ -28,33 +32,29 @@ export const auth = betterAuth({
     provider: "postgresql",
   }),
 
-  plugins: [
-    openAPI(),
-  ],
+  plugins: [openAPI()],
 
   advanced: {
     cookies: {
-
-      // cookie de sessão do usuário
       sessionToken: {
         attributes: {
           httpOnly: true,
-          secure: true,
-          sameSite: "none",
+          secure: isProduction,
+          sameSite: isProduction ? "none" : "lax",
           path: "/",
+          ...(isProduction ? { domain: ".leomarchi.com.br" } : {}),
         },
       },
 
-      // cookie usado no OAuth (state)
       state: {
         attributes: {
           httpOnly: true,
-          secure: true,
-          sameSite: "none",
+          secure: isProduction,
+          sameSite: isProduction ? "none" : "lax",
           path: "/",
+          ...(isProduction ? { domain: ".leomarchi.com.br" } : {}),
         },
       },
-
     },
   },
 });
