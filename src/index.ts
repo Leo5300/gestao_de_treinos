@@ -106,19 +106,10 @@ await app.register(fastifyApiReference, {
  * Copia headers do BetterAuth para o Fastify reply
  */
 function copyResponseHeadersToReply(response: Response, reply: FastifyReply) {
-  const headersWithOptionalGetSetCookie = response.headers as Headers & {
-    getSetCookie?: () => string[];
-  };
+  const setCookie = response.headers.get("set-cookie");
 
-  const setCookies =
-    headersWithOptionalGetSetCookie.getSetCookie?.() ??
-    (() => {
-      const setCookieHeader = response.headers.get("set-cookie");
-      return setCookieHeader ? [setCookieHeader] : [];
-    })();
-
-  if (setCookies.length > 0) {
-    reply.header("set-cookie", setCookies);
+  if (setCookie) {
+    reply.raw.setHeader("set-cookie", setCookie);
   }
 
   response.headers.forEach((value, key) => {
