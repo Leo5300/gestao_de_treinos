@@ -34,10 +34,6 @@ const envToLogger = {
   test: false,
 } as const;
 
-/**
- * Fastify instance
- * trustProxy = essencial para produção com Render / Cloudflare
- */
 const app = Fastify({
   logger: envToLogger[env.NODE_ENV],
   trustProxy: true,
@@ -46,11 +42,7 @@ const app = Fastify({
 app.setValidatorCompiler(validatorCompiler);
 app.setSerializerCompiler(serializerCompiler);
 
-/**
- * Normaliza origem do frontend
- */
 const rootOrigin = env.WEB_APP_BASE_URL.replace(/\/$/, "");
-
 const wwwOrigin = rootOrigin.startsWith("https://www.")
   ? rootOrigin
   : rootOrigin.replace("https://", "https://www.");
@@ -72,18 +64,12 @@ await app.register(fastifySwagger, {
   transform: jsonSchemaTransform,
 });
 
-/**
- * CORS
- */
 await app.register(fastifyCors, {
   origin: [rootOrigin, wwwOrigin],
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 });
 
-/**
- * API Docs
- */
 await app.register(fastifyApiReference, {
   routePrefix: "/docs",
   configuration: {
@@ -102,14 +88,20 @@ await app.register(fastifyApiReference, {
   },
 });
 
-/**
- * Copia headers do BetterAuth para o Fastify reply
- */
 function copyResponseHeadersToReply(response: Response, reply: FastifyReply) {
-  const setCookie = response.headers.get("set-cookie");
+  const headersWithOptionalGetSetCookie = response.headers as Headers & {
+    getSetCookie?: () => string[];
+  };
 
-  if (setCookie) {
-    reply.raw.setHeader("set-cookie", setCookie);
+  const setCookies =
+    headersWithOptionalGetSetCookie.getSetCookie?.() ??
+    (() => {
+      const setCookieHeader = response.headers.get("set-cookie");
+      return setCookieHeader ? [setCookieHeader] : [];
+    })();
+
+  if (setCookies.length > 0) {
+    reply.raw.setHeader("set-cookie", setCookies);
   }
 
   response.headers.forEach((value, key) => {
@@ -122,9 +114,6 @@ function copyResponseHeadersToReply(response: Response, reply: FastifyReply) {
   });
 }
 
-/**
- * Auth proxy
- */
 app.route({
   method: ["GET", "POST", "OPTIONS"],
   url: "/api/auth/*",
@@ -167,7 +156,6 @@ app.route({
       copyResponseHeadersToReply(response, reply);
 
       const text = await response.text();
-
       return reply.send(text || null);
     } catch (error) {
       app.log.error(error);
@@ -180,18 +168,12 @@ app.route({
   },
 });
 
-/**
- * API routes
- */
 await app.register(homeRoutes, { prefix: "/home" });
 await app.register(meRoutes, { prefix: "/me" });
 await app.register(statsRoutes, { prefix: "/stats" });
 await app.register(workoutPlanRoutes, { prefix: "/workout-plans" });
 await app.register(aiRoutes, { prefix: "/ai" });
 
-/**
- * Swagger JSON
- */
 app.withTypeProvider<ZodTypeProvider>().route({
   method: "GET",
   url: "/swagger.json",
@@ -203,9 +185,6 @@ app.withTypeProvider<ZodTypeProvider>().route({
   },
 });
 
-/**
- * Health route
- */
 app.withTypeProvider<ZodTypeProvider>().route({
   method: "GET",
   url: "/",
@@ -225,9 +204,6 @@ app.withTypeProvider<ZodTypeProvider>().route({
   },
 });
 
-/**
- * Start server
- */
 try {
   await app.listen({
     host: "0.0.0.0",
