@@ -88,17 +88,25 @@ await app.register(fastifyApiReference, {
   },
 });
 
+function splitSetCookieHeader(setCookieHeader: string): string[] {
+  return setCookieHeader.split(/,(?=\s*[^;,=\s]+=[^;,]+)/g);
+}
+
 function copyResponseHeadersToReply(response: Response, reply: FastifyReply) {
   const headersWithOptionalGetSetCookie = response.headers as Headers & {
     getSetCookie?: () => string[];
   };
 
-  const setCookies =
-    headersWithOptionalGetSetCookie.getSetCookie?.() ??
-    (() => {
-      const setCookieHeader = response.headers.get("set-cookie");
-      return setCookieHeader ? [setCookieHeader] : [];
-    })();
+  let setCookies: string[] = [];
+
+  if (typeof headersWithOptionalGetSetCookie.getSetCookie === "function") {
+    setCookies = headersWithOptionalGetSetCookie.getSetCookie();
+  } else {
+    const setCookieHeader = response.headers.get("set-cookie");
+    if (setCookieHeader) {
+      setCookies = splitSetCookieHeader(setCookieHeader);
+    }
+  }
 
   if (setCookies.length > 0) {
     reply.raw.setHeader("set-cookie", setCookies);
