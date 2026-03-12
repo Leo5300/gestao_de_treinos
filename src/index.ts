@@ -12,7 +12,13 @@ import {
 } from "fastify-type-provider-zod";
 import z from "zod";
 
+import { trustedOrigins } from "./lib/app-config.js";
 import { auth } from "./lib/auth.js";
+import {
+  appendSetCookieHeaders,
+  clearSessionCookies,
+  hasDuplicatedSessionCookies,
+} from "./lib/auth-cookies.js";
 import { env } from "./lib/env.js";
 import { aiRoutes } from "./routes/ai.js";
 import { homeRoutes } from "./routes/home.js";
@@ -42,12 +48,6 @@ const app = Fastify({
 app.setValidatorCompiler(validatorCompiler);
 app.setSerializerCompiler(serializerCompiler);
 
-const rootOrigin = env.WEB_APP_BASE_URL.replace(/\/$/, "");
-
-const wwwOrigin = rootOrigin.startsWith("https://www.")
-  ? rootOrigin
-  : rootOrigin.replace("https://", "https://www.");
-
 await app.register(fastifySwagger, {
   openapi: {
     info: {
@@ -68,7 +68,7 @@ await app.register(fastifySwagger, {
 });
 
 await app.register(fastifyCors, {
-  origin: [rootOrigin, wwwOrigin],
+  origin: trustedOrigins,
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 });
@@ -112,9 +112,7 @@ function copyResponseHeadersToReply(response: Response, reply: FastifyReply) {
     }
   }
 
-  if (setCookies.length > 0) {
-    reply.raw.setHeader("set-cookie", setCookies);
-  }
+  appendSetCookieHeaders(reply, setCookies);
 
   response.headers.forEach((value, key) => {
     const lowerKey = key.toLowerCase();
@@ -133,6 +131,16 @@ app.route({
   async handler(request, reply) {
     try {
       const url = new URL(request.url, env.BETTER_AUTH_URL);
+      const cookieHeader = request.raw.headers.cookie ?? "";
+
+      if (hasDuplicatedSessionCookies(cookieHeader)) {
+        clearSessionCookies(reply);
+
+        return reply.status(401).send({
+          error: "Duplicated session cookie",
+          code: "DUPLICATED_SESSION_COOKIE",
+        });
+      }
 
       const headers = new Headers();
 
@@ -169,6 +177,10 @@ app.route({
       reply.status(response.status);
 
       copyResponseHeadersToReply(response, reply);
+
+      if (url.pathname.endsWith("/sign-out")) {
+        clearSessionCookies(reply);
+      }
 
       const text = await response.text();
 

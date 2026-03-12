@@ -1,9 +1,8 @@
-import { fromNodeHeaders } from "better-auth/node";
 import { FastifyInstance } from "fastify";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 
 import { NotFoundError } from "../errors/index.js";
-import { auth } from "../lib/auth.js";
+import { getRequestSession } from "../lib/session.js";
 import { ErrorSchema, StatsQuerySchema, StatsSchema } from "../schemas/index.js";
 import { GetStats } from "../usecases/GetStats.js";
 
@@ -24,13 +23,19 @@ export const statsRoutes = async (app: FastifyInstance) => {
     },
     handler: async (request, reply) => {
       try {
-        const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.raw.headers),
-        });
+        const { duplicateSessionCookie, session } = await getRequestSession(
+          request,
+          reply,
+        );
+
         if (!session) {
           return reply.status(401).send({
-            error: "Unauthorized",
-            code: "UNAUTHORIZED",
+            error: duplicateSessionCookie
+              ? "Duplicated session cookie"
+              : "Unauthorized",
+            code: duplicateSessionCookie
+              ? "DUPLICATED_SESSION_COOKIE"
+              : "UNAUTHORIZED",
           });
         }
 

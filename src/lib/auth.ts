@@ -2,21 +2,19 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { openAPI } from "better-auth/plugins";
 
+import {
+  authSessionCookieName,
+  cookieDomain,
+  isSecureContext,
+  trustedOrigins,
+} from "./app-config.js";
 import { prisma } from "./db.js";
 import { env } from "./env.js";
-
-const appOrigin = env.WEB_APP_BASE_URL.replace(/\/$/, "");
-
-const wwwOrigin = appOrigin.startsWith("https://www.")
-  ? appOrigin
-  : appOrigin.replace("https://", "https://www.");
-
-const cookieDomain = ".leomarchi.com.br";
 
 export const auth = betterAuth({
   baseURL: env.BETTER_AUTH_URL,
 
-  trustedOrigins: [appOrigin, wwwOrigin],
+  trustedOrigins,
 
   emailAndPassword: {
     enabled: true,
@@ -37,21 +35,21 @@ export const auth = betterAuth({
 
   advanced: {
     defaultCookieAttributes: {
-      domain: cookieDomain,
-      secure: true,
-      sameSite: "none",
+      ...(cookieDomain ? { domain: cookieDomain } : {}),
+      secure: isSecureContext,
+      sameSite: isSecureContext ? "none" : "lax",
       httpOnly: true,
       path: "/",
     },
 
     cookies: {
       sessionToken: {
-        name: "__Secure-better-auth.session_token",
+        name: authSessionCookieName,
         attributes: {
           httpOnly: true,
-          secure: true,
-          sameSite: "none",
-          domain: ".leomarchi.com.br",
+          secure: isSecureContext,
+          sameSite: isSecureContext ? "none" : "lax",
+          ...(cookieDomain ? { domain: cookieDomain } : {}),
           path: "/",
         },
       },

@@ -1,4 +1,3 @@
-import { fromNodeHeaders } from "better-auth/node";
 import { FastifyInstance } from "fastify";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 import z from "zod";
@@ -8,7 +7,7 @@ import {
   SessionAlreadyStartedError,
   WorkoutPlanNotActiveError,
 } from "../errors/index.js";
-import { auth } from "../lib/auth.js";
+import { getRequestSession } from "../lib/session.js";
 import {
   ErrorSchema,
   GetWorkoutDaySchema,
@@ -43,13 +42,19 @@ export const workoutPlanRoutes = async (app: FastifyInstance) => {
     },
     handler: async (request, reply) => {
       try {
-        const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.raw.headers),
-        });
+        const { duplicateSessionCookie, session } = await getRequestSession(
+          request,
+          reply,
+        );
+
         if (!session) {
           return reply.status(401).send({
-            error: "Unauthorized",
-            code: "UNAUTHORIZED",
+            error: duplicateSessionCookie
+              ? "Duplicated session cookie"
+              : "Unauthorized",
+            code: duplicateSessionCookie
+              ? "DUPLICATED_SESSION_COOKIE"
+              : "UNAUTHORIZED",
           });
         }
 
@@ -88,13 +93,19 @@ export const workoutPlanRoutes = async (app: FastifyInstance) => {
     },
     handler: async (request, reply) => {
       try {
-        const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.raw.headers),
-        });
+        const { duplicateSessionCookie, session } = await getRequestSession(
+          request,
+          reply,
+        );
+
         if (!session) {
           return reply.status(401).send({
-            error: "Unauthorized",
-            code: "UNAUTHORIZED",
+            error: duplicateSessionCookie
+              ? "Duplicated session cookie"
+              : "Unauthorized",
+            code: duplicateSessionCookie
+              ? "DUPLICATED_SESSION_COOKIE"
+              : "UNAUTHORIZED",
           });
         }
         const createWorkoutPlan = new CreateWorkoutPlan();
@@ -138,13 +149,19 @@ export const workoutPlanRoutes = async (app: FastifyInstance) => {
     },
     handler: async (request, reply) => {
       try {
-        const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.raw.headers),
-        });
+        const { duplicateSessionCookie, session } = await getRequestSession(
+          request,
+          reply,
+        );
+
         if (!session) {
           return reply.status(401).send({
-            error: "Unauthorized",
-            code: "UNAUTHORIZED",
+            error: duplicateSessionCookie
+              ? "Duplicated session cookie"
+              : "Unauthorized",
+            code: duplicateSessionCookie
+              ? "DUPLICATED_SESSION_COOKIE"
+              : "UNAUTHORIZED",
           });
         }
 
@@ -192,13 +209,19 @@ export const workoutPlanRoutes = async (app: FastifyInstance) => {
     },
     handler: async (request, reply) => {
       try {
-        const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.raw.headers),
-        });
+        const { duplicateSessionCookie, session } = await getRequestSession(
+          request,
+          reply,
+        );
+
         if (!session) {
           return reply.status(401).send({
-            error: "Unauthorized",
-            code: "UNAUTHORIZED",
+            error: duplicateSessionCookie
+              ? "Duplicated session cookie"
+              : "Unauthorized",
+            code: duplicateSessionCookie
+              ? "DUPLICATED_SESSION_COOKIE"
+              : "UNAUTHORIZED",
           });
         }
 
@@ -249,13 +272,19 @@ export const workoutPlanRoutes = async (app: FastifyInstance) => {
     },
     handler: async (request, reply) => {
       try {
-        const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.raw.headers),
-        });
+        const { duplicateSessionCookie, session } = await getRequestSession(
+          request,
+          reply,
+        );
+
         if (!session) {
           return reply.status(401).send({
-            error: "Unauthorized",
-            code: "UNAUTHORIZED",
+            error: duplicateSessionCookie
+              ? "Duplicated session cookie"
+              : "Unauthorized",
+            code: duplicateSessionCookie
+              ? "DUPLICATED_SESSION_COOKIE"
+              : "UNAUTHORIZED",
           });
         }
 
@@ -320,13 +349,19 @@ export const workoutPlanRoutes = async (app: FastifyInstance) => {
     },
     handler: async (request, reply) => {
       try {
-        const session = await auth.api.getSession({
-          headers: fromNodeHeaders(request.raw.headers),
-        });
+        const { duplicateSessionCookie, session } = await getRequestSession(
+          request,
+          reply,
+        );
+
         if (!session) {
           return reply.status(401).send({
-            error: "Unauthorized",
-            code: "UNAUTHORIZED",
+            error: duplicateSessionCookie
+              ? "Duplicated session cookie"
+              : "Unauthorized",
+            code: duplicateSessionCookie
+              ? "DUPLICATED_SESSION_COOKIE"
+              : "UNAUTHORIZED",
           });
         }
 
