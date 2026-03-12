@@ -132,7 +132,7 @@ export const aiRoutes = async (app: FastifyInstance) => {
       const { messages } = request.body;
 
       const result = streamText({
-        model: google("gemini-1.5-flash"), // Maior RPM (15) e estável
+        model: google("gemini-2.0-flash-lite"),
         system: systemPrompt,
         messages: await convertToModelMessages(messages),
         stopWhen: stepCountIs(20),
@@ -227,3 +227,5 @@ export const aiRoutes = async (app: FastifyInstance) => {
     },
   });
 };
+
+
