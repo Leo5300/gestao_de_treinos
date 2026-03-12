@@ -18,6 +18,7 @@ import {
   appendSetCookieHeaders,
   clearSessionCookies,
   hasDuplicatedSessionCookies,
+  normalizeSessionCookieHeader,
 } from "./lib/auth-cookies.js";
 import { env } from "./lib/env.js";
 import { aiRoutes } from "./routes/ai.js";
@@ -132,14 +133,11 @@ app.route({
     try {
       const url = new URL(request.url, env.BETTER_AUTH_URL);
       const cookieHeader = request.raw.headers.cookie ?? "";
+      const duplicateSessionCookie = hasDuplicatedSessionCookies(cookieHeader);
+      const normalizedCookieHeader = normalizeSessionCookieHeader(cookieHeader);
 
-      if (hasDuplicatedSessionCookies(cookieHeader)) {
+      if (duplicateSessionCookie) {
         clearSessionCookies(reply);
-
-        return reply.status(401).send({
-          error: "Duplicated session cookie",
-          code: "DUPLICATED_SESSION_COOKIE",
-        });
       }
 
       const headers = new Headers();
@@ -154,8 +152,8 @@ app.route({
         }
       });
 
-      if (request.raw.headers.cookie) {
-        headers.set("cookie", request.raw.headers.cookie);
+      if (normalizedCookieHeader) {
+        headers.set("cookie", normalizedCookieHeader);
       }
 
       const req = new Request(url.toString(), {

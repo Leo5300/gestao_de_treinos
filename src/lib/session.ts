@@ -1,3 +1,5 @@
+import type { IncomingHttpHeaders } from "node:http";
+
 import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -5,6 +7,7 @@ import { auth } from "./auth.js";
 import {
   clearSessionCookies,
   hasDuplicatedSessionCookies,
+  normalizeSessionCookieHeader,
 } from "./auth-cookies.js";
 
 export const getRequestSession = async (
@@ -12,22 +15,24 @@ export const getRequestSession = async (
   reply: FastifyReply,
 ) => {
   const cookieHeader = request.raw.headers.cookie ?? "";
+  const duplicateSessionCookie = hasDuplicatedSessionCookies(cookieHeader);
+  const normalizedCookieHeader = normalizeSessionCookieHeader(cookieHeader);
 
-  if (hasDuplicatedSessionCookies(cookieHeader)) {
+  if (duplicateSessionCookie) {
     clearSessionCookies(reply);
-
-    return {
-      duplicateSessionCookie: true,
-      session: null,
-    };
   }
 
+  const headers: IncomingHttpHeaders = {
+    ...request.raw.headers,
+    cookie: normalizedCookieHeader,
+  };
+
   const session = await auth.api.getSession({
-    headers: fromNodeHeaders(request.raw.headers),
+    headers: fromNodeHeaders(headers),
   });
 
   return {
-    duplicateSessionCookie: false,
+    duplicateSessionCookie,
     session,
   };
 };

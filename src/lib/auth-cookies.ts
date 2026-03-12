@@ -72,6 +72,69 @@ export const hasDuplicatedSessionCookies = (cookieHeader: string): boolean => {
   return totalSessionCookies > 1;
 };
 
+const splitCookieHeader = (cookieHeader: string): string[] =>
+  cookieHeader
+    .split(";")
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+
+const getCookieName = (cookieEntry: string): string =>
+  cookieEntry.split("=")[0] ?? "";
+
+const getCookiePriority = (cookieName: string): number => {
+  if (cookieName === authSessionCookieName) {
+    return 3;
+  }
+
+  if (cookieName === "__Secure-better-auth.session_token") {
+    return 2;
+  }
+
+  if (cookieName === "better-auth.session_token") {
+    return 1;
+  }
+
+  return 0;
+};
+
+export const normalizeSessionCookieHeader = (cookieHeader: string): string => {
+  if (!cookieHeader) {
+    return cookieHeader;
+  }
+
+  const cookieEntries = splitCookieHeader(cookieHeader);
+  const sessionCookies = cookieEntries.filter((entry) =>
+    authSessionCookieNames.includes(getCookieName(entry)),
+  );
+
+  if (sessionCookies.length <= 1) {
+    return cookieEntries.join("; ");
+  }
+
+  const preferredSessionCookie = [...sessionCookies].sort((a, b) => {
+    const priorityDiff =
+      getCookiePriority(getCookieName(b)) - getCookiePriority(getCookieName(a));
+
+    if (priorityDiff !== 0) {
+      return priorityDiff;
+    }
+
+    return sessionCookies.lastIndexOf(b) - sessionCookies.lastIndexOf(a);
+  })[0];
+
+  const normalizedEntries = cookieEntries.filter((entry) => {
+    const cookieName = getCookieName(entry);
+
+    if (!authSessionCookieNames.includes(cookieName)) {
+      return true;
+    }
+
+    return entry === preferredSessionCookie;
+  });
+
+  return normalizedEntries.join("; ");
+};
+
 export const buildClearSessionCookieHeaders = (): string[] => {
   const headers: string[] = [];
 
