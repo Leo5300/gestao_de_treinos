@@ -52,6 +52,9 @@ Regras obrigatorias:
 7. Se os dados obrigatorios ja estiverem completos, nao pergunte peso, altura ou idade novamente.
 8. Se o usuario pedir um treino, pergunte apenas o que faltar entre: objetivo, dias por semana e restricoes fisicas.
 9. Assim que tiver objetivo, dias por semana e restricoes fisicas, chame createWorkoutPlan imediatamente.
+10. Quando terminar de coletar os dados necessários, chame updateUserTrainData se precisar e depois createWorkoutPlan sem pedir confirmacao extra.
+11. Depois de criar o plano, informe claramente que o treino foi criado com sucesso.
+12. Durante o onboarding, faca apenas uma pergunta por vez.
 
 Regras do updateUserTrainData:
 - weightInGrams deve ser enviado em gramas.
