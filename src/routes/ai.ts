@@ -26,24 +26,30 @@ const buildSystemPrompt = (input: {
   userName: string;
   missingRequiredTrainFields: string[];
   hasBodyFatPercentage: boolean;
+  userData: {
+    weightInKg?: number | string;
+    heightInCm?: number | string;
+    age?: number | string;
+  };
 }) => `
 Voce e um personal trainer virtual. Responda em portugues simples, curta e objetiva.
 
-Contexto do usuario autenticado:
-- Nome ja conhecido: ${input.userName}
-- Campos obrigatorios faltando agora: ${
+Contexto do usuario autenticado (ja carregado do banco):
+- Nome: ${input.userName}
+- Peso atual: ${input.userData.weightInKg} kg
+- Altura atual: ${input.userData.heightInCm} cm
+- Idade: ${input.userData.age}
+- Campos obrigatorios faltando: ${
   input.missingRequiredTrainFields.length > 0
     ? input.missingRequiredTrainFields.join(", ")
     : "nenhum"
 }
-- Gordura corporal cadastrada: ${
-  input.hasBodyFatPercentage ? "sim" : "nao"
-}
+- Gordura corporal cadastrada: ${input.hasBodyFatPercentage ? "sim" : "nao"}
 
 Regras obrigatorias:
-1. Antes de qualquer resposta, chame getUserTrainData.
+1. Use os dados acima para evitar chamar getUserTrainData desnecessariamente.
 2. Nunca peca o nome.
-3. Se faltarem dados obrigatorios, peca apenas os campos faltantes.
+3. Se faltarem dados obrigatorios, peca apenas os campos faltantes (um por vez).
 4. Ao atualizar peso, use weightInKg em quilogramas.
 5. Gordura corporal e opcional.
 6. Nao bloqueie a criacao do plano.
@@ -51,7 +57,7 @@ Regras obrigatorias:
 8. Se os dados obrigatorios ja estiverem completos, nao pergunte novamente.
 9. Se o usuario pedir treino, pergunte apenas objetivo, dias e restricoes.
 10. Assim que tiver esses dados, chame createWorkoutPlan.
-11. Se necessario, atualize os dados com updateUserTrainData.
+11. Se o usuario informar novos dados fisicos, chame updateUserTrainData imediatamente.
 12. Depois de criar o plano, informe sucesso.
 13. Durante onboarding, faca uma pergunta por vez.
 
@@ -59,7 +65,6 @@ Regras do plano:
 - Exatamente 7 dias
 - Dias sem treino: rest
 - 4 a 8 exercicios por sessao
-- coverImageUrl e opcional
 `;
 
 export const aiRoutes = async (app: FastifyInstance) => {
@@ -92,6 +97,7 @@ export const aiRoutes = async (app: FastifyInstance) => {
 
       const userId = session.user.id;
 
+      // Busca dados no banco para injetar no Prompt (Economiza Cota da API)
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: {
@@ -113,28 +119,35 @@ export const aiRoutes = async (app: FastifyInstance) => {
         userName: session.user.name?.trim() || user?.name?.trim() || "usuario",
         missingRequiredTrainFields,
         hasBodyFatPercentage: user?.bodyFatPercentage != null,
+        userData: {
+          weightInKg:
+            user?.weightInGrams != null
+              ? user.weightInGrams / 1000
+              : "nao informado",
+          heightInCm: user?.heightInCentimeters ?? "nao informado",
+          age: user?.age ?? "nao informada",
+        },
       });
 
       const { messages } = request.body;
 
       const result = streamText({
-        model: google("gemini-1.5-flash"),
+        model: google("gemini-1.5-flash"), // Maior RPM (15) e estável
         system: systemPrompt,
         messages: await convertToModelMessages(messages),
         stopWhen: stepCountIs(20),
         tools: {
           getUserTrainData: tool({
-            description: "Busca os dados fisicos do usuario autenticado.",
+            description: "Busca os dados fisicos detalhados do usuario no banco.",
             inputSchema: z.object({}),
             execute: async () => {
               const usecase = new GetUserTrainData();
-
               return usecase.execute({ userId });
             },
           }),
 
           updateUserTrainData: tool({
-            description: "Salva os dados fisicos do usuario autenticado.",
+            description: "Salva ou atualiza os dados fisicos do usuario.",
             inputSchema: z.object({
               weightInKg: z.number().positive(),
               heightInCentimeters: z.number().positive(),
@@ -143,7 +156,6 @@ export const aiRoutes = async (app: FastifyInstance) => {
             }),
             execute: async (params) => {
               const usecase = new UpsertUserTrainData();
-
               return usecase.execute({
                 userId,
                 weightInGrams: Math.round(params.weightInKg * 1000),
@@ -155,17 +167,16 @@ export const aiRoutes = async (app: FastifyInstance) => {
           }),
 
           getWorkoutPlans: tool({
-            description: "Lista planos do usuario.",
+            description: "Lista os planos de treino ja existentes do usuario.",
             inputSchema: z.object({}),
             execute: async () => {
               const usecase = new ListWorkoutPlans();
-
               return usecase.execute({ userId });
             },
           }),
 
           createWorkoutPlan: tool({
-            description: "Cria um plano completo.",
+            description: "Gera um novo plano de treino de 7 dias.",
             inputSchema: z.object({
               name: z.string().min(1),
               workoutDays: z
@@ -191,7 +202,6 @@ export const aiRoutes = async (app: FastifyInstance) => {
             }),
             execute: async (input) => {
               const usecase = new CreateWorkoutPlan();
-
               return usecase.execute({
                 userId,
                 name: input.name,
