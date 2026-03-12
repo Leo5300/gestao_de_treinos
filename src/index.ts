@@ -43,6 +43,7 @@ app.setValidatorCompiler(validatorCompiler);
 app.setSerializerCompiler(serializerCompiler);
 
 const rootOrigin = env.WEB_APP_BASE_URL.replace(/\/$/, "");
+
 const wwwOrigin = rootOrigin.startsWith("https://www.")
   ? rootOrigin
   : rootOrigin.replace("https://", "https://www.");
@@ -54,6 +55,7 @@ await app.register(fastifySwagger, {
       description: "API para o bootcamp de treinos do FSC",
       version: "1.0.0",
     },
+
     servers: [
       {
         description: "API Base URL",
@@ -61,6 +63,7 @@ await app.register(fastifySwagger, {
       },
     ],
   },
+
   transform: jsonSchemaTransform,
 });
 
@@ -103,6 +106,7 @@ function copyResponseHeadersToReply(response: Response, reply: FastifyReply) {
     setCookies = headersWithOptionalGetSetCookie.getSetCookie();
   } else {
     const setCookieHeader = response.headers.get("set-cookie");
+
     if (setCookieHeader) {
       setCookies = splitSetCookieHeader(setCookieHeader);
     }
@@ -125,6 +129,7 @@ function copyResponseHeadersToReply(response: Response, reply: FastifyReply) {
 app.route({
   method: ["GET", "POST", "OPTIONS"],
   url: "/api/auth/*",
+
   async handler(request, reply) {
     try {
       const url = new URL(request.url, env.BETTER_AUTH_URL);
@@ -148,6 +153,7 @@ app.route({
       const req = new Request(url.toString(), {
         method: request.method,
         headers,
+
         ...(request.body
           ? {
               body:
@@ -161,9 +167,11 @@ app.route({
       const response = await auth.handler(req);
 
       reply.status(response.status);
+
       copyResponseHeadersToReply(response, reply);
 
       const text = await response.text();
+
       return reply.send(text || null);
     } catch (error) {
       app.log.error(error);

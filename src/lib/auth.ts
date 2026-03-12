@@ -46,21 +46,12 @@ export const auth = betterAuth({
 
     cookies: {
       sessionToken: {
+        name: "__Secure-better-auth.session_token",
         attributes: {
-          domain: cookieDomain,
+          httpOnly: true,
           secure: true,
           sameSite: "none",
-          httpOnly: true,
-          path: "/",
-        },
-      },
-
-      state: {
-        attributes: {
-          domain: cookieDomain,
-          secure: true,
-          sameSite: "none",
-          httpOnly: true,
+          domain: ".leomarchi.com.br",
           path: "/",
         },
       },
