@@ -1,4 +1,4 @@
-import { google } from "@ai-sdk/google";
+import { openai } from "@ai-sdk/openai";
 import {
   convertToModelMessages,
   stepCountIs,
@@ -132,7 +132,7 @@ export const aiRoutes = async (app: FastifyInstance) => {
       const { messages } = request.body;
 
       const result = streamText({
-        model: google("gemini-2.0-flash-lite"),
+        model: openai("gpt-4.1-nano"),
         system: systemPrompt,
         messages: await convertToModelMessages(messages),
         stopWhen: stepCountIs(20),
