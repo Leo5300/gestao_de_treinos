@@ -1,6 +1,7 @@
 import { google } from "@ai-sdk/google";
 import {
   convertToModelMessages,
+  generateObject,
   stepCountIs,
   streamText,
   tool,
@@ -13,6 +14,7 @@ import z from "zod";
 import { WeekDay } from "../generated/prisma/enums.js";
 import { prisma } from "../lib/db.js";
 import { getRequestSession } from "../lib/session.js";
+import { ErrorSchema } from "../schemas/index.js";
 import { CreateWorkoutPlan } from "../usecases/CreateWorkoutPlan.js";
 import { GetUserTrainData } from "../usecases/GetUserTrainData.js";
 import { ListWorkoutPlans } from "../usecases/ListWorkoutPlans.js";
@@ -20,6 +22,66 @@ import { UpsertUserTrainData } from "../usecases/UpsertUserTrainData.js";
 
 const AiRequestBodySchema = z.object({
   messages: z.array(z.custom<UIMessage>()).min(1),
+});
+
+const OnboardingWorkoutPlanRequestBodySchema = z.object({
+  objective: z.string().trim().min(1),
+  experienceLevel: z.enum(["beginner", "intermediate", "advanced"]),
+  workoutDaysPerWeek: z.number().int().min(1).max(7),
+  sessionDurationInMinutes: z.number().int().min(15).max(180),
+  equipmentAccess: z.enum(["bodyweight", "basic", "gym"]),
+  restrictions: z.string().trim().max(500).nullable().optional(),
+});
+
+const GeneratedWorkoutPlanSchema = z.object({
+  name: z.string().trim().min(1),
+  summary: z.string().trim().min(1),
+  workoutDays: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1),
+        weekDay: z.enum(WeekDay),
+        isRest: z.boolean(),
+        estimatedDurationInSeconds: z.number().int().positive(),
+        coverImageUrl: z.string().url().optional(),
+        exercises: z.array(
+          z.object({
+            order: z.number().int().min(0),
+            name: z.string().trim().min(1),
+            sets: z.number().int().positive(),
+            reps: z.number().int().positive(),
+            restTimeInSeconds: z.number().int().positive(),
+          }),
+        ),
+      }),
+    )
+    .length(7),
+});
+
+const GeneratedWorkoutPlanResponseSchema = z.object({
+  id: z.uuid(),
+  name: z.string().trim().min(1),
+  summary: z.string().trim().min(1),
+  workoutDays: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1),
+        weekDay: z.enum(WeekDay),
+        isRest: z.boolean(),
+        estimatedDurationInSeconds: z.number().int().positive(),
+        coverImageUrl: z.string().url().optional(),
+        exercises: z.array(
+          z.object({
+            order: z.number().int().min(0),
+            name: z.string().trim().min(1),
+            sets: z.number().int().positive(),
+            reps: z.number().int().positive(),
+            restTimeInSeconds: z.number().int().positive(),
+          }),
+        ),
+      }),
+    )
+    .length(7),
 });
 
 const buildSystemPrompt = (input: {
@@ -67,7 +129,150 @@ Regras do plano:
 - 4 a 8 exercicios por sessao
 `;
 
+const buildWorkoutPlanPrompt = (input: {
+  userName: string;
+  weightInKg: number;
+  heightInCm: number;
+  age: number;
+  bodyFatPercentage: number | null;
+  objective: string;
+  experienceLevel: "beginner" | "intermediate" | "advanced";
+  workoutDaysPerWeek: number;
+  sessionDurationInMinutes: number;
+  equipmentAccess: "bodyweight" | "basic" | "gym";
+  restrictions?: string | null;
+}) => `
+Voce e um personal trainer especializado em montar planos de treino semanais.
+Responda em portugues do Brasil.
+
+Monte um plano para este usuario:
+- Nome: ${input.userName}
+- Peso: ${input.weightInKg} kg
+- Altura: ${input.heightInCm} cm
+- Idade: ${input.age}
+- Gordura corporal: ${
+   input.bodyFatPercentage == null ? "nao informada" : `${input.bodyFatPercentage}%`
+ }
+- Objetivo: ${input.objective}
+- Nivel: ${input.experienceLevel}
+- Dias por semana: ${input.workoutDaysPerWeek}
+- Duracao por treino: ${input.sessionDurationInMinutes} minutos
+- Equipamentos: ${input.equipmentAccess}
+- Restricoes: ${input.restrictions?.trim() || "nenhuma"}
+
+Regras obrigatorias:
+1. Gere exatamente 7 dias, de MONDAY a SUNDAY, sem repetir weekDay.
+2. Os dias sem treino devem ter isRest=true e exercises=[].
+3. Os dias de treino devem ter isRest=false e entre 4 e 8 exercicios.
+4. estimatedDurationInSeconds deve refletir aproximadamente ${input.sessionDurationInMinutes} minutos nos dias de treino.
+5. O plano deve respeitar objetivo, nivel, equipamentos e restricoes.
+6. Use nomes curtos e claros em portugues para o plano, dias e exercicios.
+7. Distribua os dias de treino de forma equilibrada ao longo da semana.
+8. Nao inclua observacoes fora do schema.
+`;
+
 export const aiRoutes = async (app: FastifyInstance) => {
+  // Se o onboarding voltar a ser conduzido totalmente pela IA, remova esta rota
+  // dedicada e volte a enviar o fluxo do frontend para o chat stream em "/".
+  app.withTypeProvider<ZodTypeProvider>().route({
+    method: "POST",
+    url: "/workout-plan",
+    schema: {
+      tags: ["AI"],
+      summary: "Generate and persist a workout plan from guided onboarding",
+      body: OnboardingWorkoutPlanRequestBodySchema,
+      response: {
+        201: GeneratedWorkoutPlanResponseSchema,
+        400: ErrorSchema,
+        401: ErrorSchema,
+        500: ErrorSchema,
+      },
+    },
+    handler: async (request, reply) => {
+      try {
+        const { duplicateSessionCookie, session } = await getRequestSession(
+          request,
+          reply,
+        );
+
+        if (!session) {
+          return reply.status(401).send({
+            error: duplicateSessionCookie
+              ? "Duplicated session cookie"
+              : "Unauthorized",
+            code: duplicateSessionCookie
+              ? "DUPLICATED_SESSION_COOKIE"
+              : "UNAUTHORIZED",
+          });
+        }
+
+        const user = await prisma.user.findUnique({
+          where: { id: session.user.id },
+          select: {
+            name: true,
+            weightInGrams: true,
+            heightInCentimeters: true,
+            age: true,
+            bodyFatPercentage: true,
+          },
+        });
+
+        if (
+          !user?.weightInGrams ||
+          !user.heightInCentimeters ||
+          !user.age
+        ) {
+          return reply.status(400).send({
+            error: "Incomplete user train data",
+            code: "INCOMPLETE_USER_TRAIN_DATA",
+          });
+        }
+
+        const { object } = await generateObject({
+          model: google("gemini-2.0-flash"),
+          schema: GeneratedWorkoutPlanSchema,
+          prompt: buildWorkoutPlanPrompt({
+            userName: session.user.name?.trim() || user.name?.trim() || "usuario",
+            weightInKg: user.weightInGrams / 1000,
+            heightInCm: user.heightInCentimeters,
+            age: user.age,
+            bodyFatPercentage: user.bodyFatPercentage,
+            objective: request.body.objective,
+            experienceLevel: request.body.experienceLevel,
+            workoutDaysPerWeek: request.body.workoutDaysPerWeek,
+            sessionDurationInMinutes: request.body.sessionDurationInMinutes,
+            equipmentAccess: request.body.equipmentAccess,
+            restrictions: request.body.restrictions,
+          }),
+        });
+
+        const createWorkoutPlan = new CreateWorkoutPlan();
+        const result = await createWorkoutPlan.execute({
+          userId: session.user.id,
+          name: object.name,
+          workoutDays: object.workoutDays.map((workoutDay) => ({
+            ...workoutDay,
+            exercises: workoutDay.isRest ? [] : workoutDay.exercises,
+          })),
+        });
+
+        return reply.status(201).send({
+          id: result.id,
+          name: result.name,
+          summary: object.summary,
+          workoutDays: result.workoutDays,
+        });
+      } catch (error) {
+        app.log.error(error);
+
+        return reply.status(500).send({
+          error: "Internal server error",
+          code: "INTERNAL_SERVER_ERROR",
+        });
+      }
+    },
+  });
+
   app.withTypeProvider<ZodTypeProvider>().route({
     method: "POST",
     url: "/",
