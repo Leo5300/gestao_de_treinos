@@ -171,6 +171,100 @@ Regras obrigatorias:
 8. Nao inclua observacoes fora do schema.
 `;
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  return "Unknown error";
+};
+
+const classifyWorkoutPlanError = (
+  error: unknown,
+): {
+  statusCode: 500 | 502 | 503;
+  code: string;
+  error: string;
+} => {
+  const message = getErrorMessage(error);
+  const normalizedMessage = message.toLowerCase();
+
+  if (
+    normalizedMessage.includes("quota") ||
+    normalizedMessage.includes("rate limit") ||
+    normalizedMessage.includes("resource_exhausted") ||
+    normalizedMessage.includes("too many requests")
+  ) {
+    return {
+      statusCode: 503,
+      code: "AI_QUOTA_EXCEEDED",
+      error: "AI provider quota exceeded",
+    };
+  }
+
+  if (
+    normalizedMessage.includes("model") &&
+    (normalizedMessage.includes("not found") ||
+      normalizedMessage.includes("not supported") ||
+      normalizedMessage.includes("unavailable"))
+  ) {
+    return {
+      statusCode: 502,
+      code: "AI_MODEL_ERROR",
+      error: "AI model is unavailable",
+    };
+  }
+
+  if (
+    normalizedMessage.includes("apikey") ||
+    normalizedMessage.includes("api key") ||
+    normalizedMessage.includes("permission") ||
+    normalizedMessage.includes("unauthorized") ||
+    normalizedMessage.includes("forbidden")
+  ) {
+    return {
+      statusCode: 502,
+      code: "AI_PROVIDER_AUTH_ERROR",
+      error: "AI provider authentication failed",
+    };
+  }
+
+  if (
+    normalizedMessage.includes("schema") ||
+    normalizedMessage.includes("validation") ||
+    normalizedMessage.includes("json") ||
+    normalizedMessage.includes("object")
+  ) {
+    return {
+      statusCode: 502,
+      code: "AI_INVALID_OUTPUT",
+      error: "AI returned an invalid workout plan",
+    };
+  }
+
+  if (
+    normalizedMessage.includes("prisma") ||
+    normalizedMessage.includes("transaction") ||
+    normalizedMessage.includes("workout plan")
+  ) {
+    return {
+      statusCode: 500,
+      code: "WORKOUT_PLAN_PERSISTENCE_ERROR",
+      error: "Failed to persist workout plan",
+    };
+  }
+
+  return {
+    statusCode: 500,
+    code: "INTERNAL_SERVER_ERROR",
+    error: "Internal server error",
+  };
+};
+
 export const aiRoutes = async (app: FastifyInstance) => {
   // Se o onboarding voltar a ser conduzido totalmente pela IA, remova esta rota
   // dedicada e volte a enviar o fluxo do frontend para o chat stream em "/".
@@ -185,6 +279,8 @@ export const aiRoutes = async (app: FastifyInstance) => {
         201: GeneratedWorkoutPlanResponseSchema,
         400: ErrorSchema,
         401: ErrorSchema,
+        502: ErrorSchema,
+        503: ErrorSchema,
         500: ErrorSchema,
       },
     },
@@ -265,9 +361,11 @@ export const aiRoutes = async (app: FastifyInstance) => {
       } catch (error) {
         app.log.error(error);
 
-        return reply.status(500).send({
-          error: "Internal server error",
-          code: "INTERNAL_SERVER_ERROR",
+        const classifiedError = classifyWorkoutPlanError(error);
+
+        return reply.status(classifiedError.statusCode).send({
+          error: classifiedError.error,
+          code: classifiedError.code,
         });
       }
     },
