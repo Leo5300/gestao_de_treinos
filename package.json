@@ -30,7 +30,6 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.43",
-    "@ai-sdk/openai": "^3.0.41",
     "@fastify/cors": "11.2.0",
     "@fastify/swagger": "9.7.0",
     "@prisma/adapter-pg": "7.4.0",
