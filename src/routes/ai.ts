@@ -34,8 +34,7 @@ const OnboardingWorkoutPlanRequestBodySchema = z.object({
 });
 
 const GeneratedWorkoutPlanSchema = z.object({
-  name: z.string().trim().min(1),
-  summary: z.string().trim().min(1),
+  name: z.string().trim().min(1).max(60),
   workoutDays: z
     .array(
       z.object({
@@ -43,7 +42,6 @@ const GeneratedWorkoutPlanSchema = z.object({
         weekDay: z.enum(WeekDay),
         isRest: z.boolean(),
         estimatedDurationInSeconds: z.number().int().positive(),
-        coverImageUrl: z.string().url().optional(),
         exercises: z.array(
           z.object({
             order: z.number().int().min(0),
@@ -69,7 +67,6 @@ const GeneratedWorkoutPlanResponseSchema = z.object({
         weekDay: z.enum(WeekDay),
         isRest: z.boolean(),
         estimatedDurationInSeconds: z.number().int().positive(),
-        coverImageUrl: z.string().url().optional(),
         exercises: z.array(
           z.object({
             order: z.number().int().min(0),
@@ -142,33 +139,32 @@ const buildWorkoutPlanPrompt = (input: {
   equipmentAccess: "bodyweight" | "basic" | "gym";
   restrictions?: string | null;
 }) => `
-Voce e um personal trainer especializado em montar planos de treino semanais.
-Responda em portugues do Brasil.
+Monte um plano semanal em portugues do Brasil.
 
-Monte um plano para este usuario:
-- Nome: ${input.userName}
-- Peso: ${input.weightInKg} kg
-- Altura: ${input.heightInCm} cm
-- Idade: ${input.age}
-- Gordura corporal: ${
+Usuario:
+- nome: ${input.userName}
+- peso: ${input.weightInKg} kg
+- altura: ${input.heightInCm} cm
+- idade: ${input.age}
+- gordura corporal: ${
    input.bodyFatPercentage == null ? "nao informada" : `${input.bodyFatPercentage}%`
  }
-- Objetivo: ${input.objective}
-- Nivel: ${input.experienceLevel}
-- Dias por semana: ${input.workoutDaysPerWeek}
-- Duracao por treino: ${input.sessionDurationInMinutes} minutos
-- Equipamentos: ${input.equipmentAccess}
-- Restricoes: ${input.restrictions?.trim() || "nenhuma"}
+- objetivo: ${input.objective}
+- nivel: ${input.experienceLevel}
+- dias/semana: ${input.workoutDaysPerWeek}
+- duracao por treino: ${input.sessionDurationInMinutes} minutos
+- equipamento: ${input.equipmentAccess}
+- restricoes: ${input.restrictions?.trim() || "nenhuma"}
 
-Regras obrigatorias:
-1. Gere exatamente 7 dias, de MONDAY a SUNDAY, sem repetir weekDay.
-2. Os dias sem treino devem ter isRest=true e exercises=[].
-3. Os dias de treino devem ter isRest=false e entre 4 e 8 exercicios.
-4. estimatedDurationInSeconds deve refletir aproximadamente ${input.sessionDurationInMinutes} minutos nos dias de treino.
-5. O plano deve respeitar objetivo, nivel, equipamentos e restricoes.
-6. Use nomes curtos e claros em portugues para o plano, dias e exercicios.
-7. Distribua os dias de treino de forma equilibrada ao longo da semana.
-8. Nao inclua observacoes fora do schema.
+Regras:
+- retorne exatamente 7 dias, de MONDAY a SUNDAY, sem repetir weekDay
+- dias sem treino: isRest=true e exercises=[]
+- dias de treino: isRest=false e 4 a 6 exercicios
+- estimatedDurationInSeconds proximo de ${input.sessionDurationInMinutes} minutos
+- respeite objetivo, nivel, equipamento e restricoes
+- use nomes curtos em portugues para plano, dias e exercicios
+- nao retorne coverImageUrl
+- nao retorne texto fora do schema
 `;
 
 const getErrorMessage = (error: unknown): string => {
@@ -326,6 +322,7 @@ export const aiRoutes = async (app: FastifyInstance) => {
 
         const { object } = await generateObject({
           model: google("gemini-2.0-flash"),
+          maxRetries: 0,
           schema: GeneratedWorkoutPlanSchema,
           prompt: buildWorkoutPlanPrompt({
             userName: session.user.name?.trim() || user.name?.trim() || "usuario",
@@ -355,7 +352,7 @@ export const aiRoutes = async (app: FastifyInstance) => {
         return reply.status(201).send({
           id: result.id,
           name: result.name,
-          summary: object.summary,
+          summary: `Plano criado para ${request.body.workoutDaysPerWeek} dia(s) por semana com foco em ${request.body.objective}.`,
           workoutDays: result.workoutDays,
         });
       } catch (error) {
@@ -436,6 +433,7 @@ export const aiRoutes = async (app: FastifyInstance) => {
 
       const result = streamText({
         model: google("gemini-2.0-flash"),
+        maxRetries: 0,
         system: systemPrompt,
         messages: await convertToModelMessages(messages),
         stopWhen: stepCountIs(20),
