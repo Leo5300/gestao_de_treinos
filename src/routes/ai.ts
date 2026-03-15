@@ -33,14 +33,13 @@ const OnboardingWorkoutPlanRequestBodySchema = z.object({
   restrictions: z.string().trim().max(500).nullable().optional(),
 });
 
-const GeneratedWorkoutPlanSchema = z.object({
+const GeneratedTrainingDaysSchema = z.object({
   name: z.string().trim().min(1).max(60),
-  workoutDays: z
+  trainingDays: z
     .array(
       z.object({
         name: z.string().trim().min(1),
         weekDay: z.enum(WeekDay),
-        isRest: z.boolean(),
         estimatedDurationInSeconds: z.number().int().positive(),
         exercises: z.array(
           z.object({
@@ -53,7 +52,8 @@ const GeneratedWorkoutPlanSchema = z.object({
         ),
       }),
     )
-    .length(7),
+    .min(1)
+    .max(7),
 });
 
 const GeneratedWorkoutPlanResponseSchema = z.object({
@@ -80,6 +80,26 @@ const GeneratedWorkoutPlanResponseSchema = z.object({
     )
     .length(7),
 });
+
+const weekDayOrder = [
+  WeekDay.MONDAY,
+  WeekDay.TUESDAY,
+  WeekDay.WEDNESDAY,
+  WeekDay.THURSDAY,
+  WeekDay.FRIDAY,
+  WeekDay.SATURDAY,
+  WeekDay.SUNDAY,
+] as const;
+
+const restDayNames: Record<WeekDay, string> = {
+  MONDAY: "Descanso",
+  TUESDAY: "Descanso",
+  WEDNESDAY: "Descanso",
+  THURSDAY: "Descanso",
+  FRIDAY: "Descanso",
+  SATURDAY: "Descanso",
+  SUNDAY: "Descanso",
+};
 
 const buildSystemPrompt = (input: {
   userName: string;
@@ -157,13 +177,14 @@ Usuario:
 - restricoes: ${input.restrictions?.trim() || "nenhuma"}
 
 Regras:
-- retorne exatamente 7 dias, de MONDAY a SUNDAY, sem repetir weekDay
-- dias sem treino: isRest=true e exercises=[]
-- dias de treino: isRest=false e 4 a 6 exercicios
+- retorne somente os dias de treino em trainingDays
+- retorne exatamente ${input.workoutDaysPerWeek} dias de treino
+- nao repita weekDay
+- cada dia de treino deve ter 4 a 6 exercicios
 - estimatedDurationInSeconds proximo de ${input.sessionDurationInMinutes} minutos
 - respeite objetivo, nivel, equipamento e restricoes
 - use nomes curtos em portugues para plano, dias e exercicios
-- nao retorne coverImageUrl
+- nao retorne dias de descanso
 - nao retorne texto fora do schema
 `;
 
@@ -323,9 +344,9 @@ export const aiRoutes = async (app: FastifyInstance) => {
         const { object } = await generateObject({
           model: google("gemini-2.0-flash"),
           maxRetries: 0,
-          maxOutputTokens: 1600,
+          maxOutputTokens: 900,
           temperature: 0.4,
-          schema: GeneratedWorkoutPlanSchema,
+          schema: GeneratedTrainingDaysSchema,
           prompt: buildWorkoutPlanPrompt({
             userName: session.user.name?.trim() || user.name?.trim() || "usuario",
             weightInKg: user.weightInGrams / 1000,
@@ -341,14 +362,48 @@ export const aiRoutes = async (app: FastifyInstance) => {
           }),
         });
 
+        const uniqueTrainingDays = new Map<WeekDay, (typeof object.trainingDays)[number]>();
+
+        for (const trainingDay of object.trainingDays) {
+          if (!uniqueTrainingDays.has(trainingDay.weekDay)) {
+            uniqueTrainingDays.set(trainingDay.weekDay, trainingDay);
+          }
+        }
+
+        if (uniqueTrainingDays.size !== request.body.workoutDaysPerWeek) {
+          return reply.status(502).send({
+            error: "AI returned an invalid workout plan",
+            code: "AI_INVALID_OUTPUT",
+          });
+        }
+
+        const workoutDays = weekDayOrder.map((weekDay) => {
+          const trainingDay = uniqueTrainingDays.get(weekDay);
+
+          if (!trainingDay) {
+            return {
+              name: restDayNames[weekDay],
+              weekDay,
+              isRest: true,
+              estimatedDurationInSeconds: 900,
+              exercises: [],
+            };
+          }
+
+          return {
+            name: trainingDay.name,
+            weekDay,
+            isRest: false,
+            estimatedDurationInSeconds: trainingDay.estimatedDurationInSeconds,
+            exercises: trainingDay.exercises,
+          };
+        });
+
         const createWorkoutPlan = new CreateWorkoutPlan();
         const result = await createWorkoutPlan.execute({
           userId: session.user.id,
           name: object.name,
-          workoutDays: object.workoutDays.map((workoutDay) => ({
-            ...workoutDay,
-            exercises: workoutDay.isRest ? [] : workoutDay.exercises,
-          })),
+          workoutDays,
         });
 
         return reply.status(201).send({
