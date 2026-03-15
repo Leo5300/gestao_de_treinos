@@ -323,6 +323,8 @@ export const aiRoutes = async (app: FastifyInstance) => {
         const { object } = await generateObject({
           model: google("gemini-2.0-flash"),
           maxRetries: 0,
+          maxOutputTokens: 1600,
+          temperature: 0.4,
           schema: GeneratedWorkoutPlanSchema,
           prompt: buildWorkoutPlanPrompt({
             userName: session.user.name?.trim() || user.name?.trim() || "usuario",
